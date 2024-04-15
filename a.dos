@@ -2,10 +2,12 @@
 stk_price = select * from loadTable("dfs://ods_stock_quotation","ods_stock_quotation")
 
 
-x = select secu_code, end_date, temporalAdd(end_date, -20d) as  before_20_end_date,  temporalAdd(end_date, 20d) as  after_20_end_date,  change_pct from stk_price where change_pct > 0.08 and lead(change_pct) > 0.08 and end_date >= 2014.01.01 context by secu_code csort end_date 
+x = select lead(close_price)\lead(close_price, 5)-1 as next_5d_chg_pct, temporalAdd(end_date, -20d) as before_20_end_date, temporalAdd(end_date, 20d) as after_20_end_date, * from stk_price where change_pct > 0.08 and lead(change_pct) > 0.08 and end_date >= 2014.01.01 context by secu_code csort end_date 
 
-select * from 
-select *  from x where secu_code = `000002.SZ
+select * from x limit 100
+select *  from stk_price  where secu_code = `000002.SZ limit 1000
+
+
 
 
 
