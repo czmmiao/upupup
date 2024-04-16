@@ -36,120 +36,120 @@ go
 */
 stk_filter = def (stk_list, eom_board = true){
 
-  //排除st ，退市，停牌，未满3个月，北交所数据，
-  riskstock_list = get_riskstock_list(st = true, delisting = true,suspend = true,lessthan90days = false,beijing = false)
-
-  //signal_to_tradingday(signal_date,20)  为持仓结束时间，建仓后20个交易日, specialstock_list_filter  剔除一字板
-  result_table = select end_date, data_code, date2double(signal_to_tradingday(end_date,20)) as factor_value from specialstock_list_filter(stk_list,riskstock_list,true,eom_board)
+    //排除st ，退市，停牌，未满3个月，北交所数据，
+    riskstock_list = get_riskstock_list(st = true, delisting = true,suspend = true,lessthan90days = false,beijing = false)
   
-  return result_table;
-}
-
-B = get_indicator_data_matrix(`1,`185000000000, `6)
-
-/*
-    计算价格相对强度
-*/
-
-stk_price_rsi = def (B){
-	//后复权价格
-	//B = get_indicator_data_matrix(`1,`185000000000, `6)
-	min_date = 2013.01.01
-	//后复权收盘价
-	price_matrix = B
-	//矩阵所有股票代码，用于排除北交所
-	all_secu_codes = (price_matrix.colNames())
-	//筛选13年以后行情数据
-	end_date_index = at( price_matrix.rowNames()> = min_date)
-	//筛选后的矩阵
-	price_matrix_filter = price_matrix[end_date_index, all_secu_codes]
-	//偏移100，用于计算100个交易日的收益
-	price_100pre_matrix = move(price_matrix_filter,100)
-	//100个交易日收益
-	p100d_chg_pct = ratio(price_matrix_filter,price_100pre_matrix)-1
-	//每日收益截面rank 》50%的股票列表
-	rank_lt_50 = iif(rowRank(p100d_chg_pct,tiesMethod = `average, percent = true,ascending = true)> = 0.5,1,NULL)
-	//用上月的数据 ，偏移20个交易日
-	rank_lt_50_mv20 = move(rank_lt_50,20)
-	//每日的技术面榜单，信号发出时间 股价强度结果 
-	rsi_table = select data_code, end_date, 1 as factor_value from trans_for_doquery(rank_lt_50_mv20) where end_date < = calc_today()
-
-	result_table = stk_filter(rsi_table)
-	 
-	result = exec factor_value from result_table pivot by end_date,data_code   
-	
-	return  ::setIndexedMatrix!(result)
-}
-
-
-/*
-    计算价格底部形态
-*/
-
-stk_k_line_bottom = def (B){
-    //B = get_indicator_data_matrix(`1,`185200000000,`6)  
-	min_date = min(B.rowNames())
-	//后复权因子
-    df_adjFactor = trans_for_doquery(B)
- 
-	df_stock_quotation_debug0 = select secu_code as data_code, end_date, iif(low_price = = 0 or if_suspend = 1, NULL, low_price) as low_price, iif(high_price = = 0 or if_suspend = 1, NULL, high_price ) as high_price, iif(close_price = = 0 or if_suspend = 1, NULL, close_price ) as close_price, iif(open_price = = 0 or if_suspend = 1, NULL, open_price ) as open_price, if_suspend, iif(low_price>pre_close_price and low_price = high_price, 1,0) stockboard from loadTable("dfs://ods_stock_quotation","ods_stock_quotation") where end_date > = min_date and if_trading_day = 1 order by end_date 
-	df_stock_quotation = select data_code, end_date, ffill(low_price) as low_price, ffill(high_price) as high_price, ffill(open_price) as open_price, ffill(close_price) as close_price, if_suspend,stockboard from df_stock_quotation_debug0 context by data_code csort end_date 
-
-	//获取行情最高最低后复权价格
-	df_stock_adj = select data_code, end_date, monthEnd(end_date) as month_end_date, low_price*factor_value as low_price, high_price*factor_value as high_price, close_price*factor_value as close_price, open_price * factor_value as open_price, if_suspend, stockboard from ej(df_stock_quotation as s,df_adjFactor as a, `data_code`end_date ) order by end_date 
-	//制造月线,日级 
-	day_k = select data_code,end_date, month_end_date, min(low_price) as m_low_price, max(high_price) as m_high_price, close_price, first(open_price) as m_open_price, last(close_price) as m_close_price from df_stock_adj where if_suspend = 0 context by data_code, month_end_date csort end_date 
-	//月线 
-	m_k = select data_code, month_end_date, m_open_price, m_close_price from day_k context by data_code, month_end_date csort end_date desc limit 1  
-	//构建priceMax 为底部形态准备
-	m_k_priceMax = select data_code, month_end_date, m_close_price,m_open_price, max(m_open_price, m_close_price) as priceMax from m_k order by month_end_date
-	window_data = select *, window(size, month_end_date, -17:0) as window_size, window(canslim_bottom_rule_func,[priceMax, m_close_price,month_end_date], -17:0) as w_first_priceMax_rank from m_k_priceMax context by data_code  
-
-	bottom_list_table = select data_code, month_end_date as end_date, iif(w_first_priceMax_rank = = true and m_close_price > m_open_price, 1, 0) as factor_value from window_data where month_end_date > = 2012.01.01 
-	bottom_list_matrix = trans_table_to_matrix(bottom_list_table)
-	bottom_list_matrix_move = move(bottom_list_matrix,3) 
-	bottom_list_result = msum(bottom_list_matrix_move,3,1)
-	bottom_list_result_gt0 = iif(bottom_list_result>0,1,NULL)
-    bottom_table = select data_code, end_date, gmtime(datetime(monthEnd(temporalAdd(end_date,1M))))$LONG\1000 as factor_value from trans_for_doquery(bottom_list_result_gt0) where end_date < = calc_today()
-	result_table = canslim_common_filter(bottom_table)
-	//save_indicator 240000000021  
-	result = exec  factor_value from result_table pivot by end_date,data_code   
-	result = ::setIndexedMatrix!(result)
-
-	return result 
-}
-
-
-canslim_stock_k_line_bottom = def (B){
-    //B = get_indicator_data_matrix(`1,`185200000000,`6)  
-	min_date = min(B.rowNames())
-	//后复权因子
-    df_adjFactor = trans_for_doquery(B)
- 
-	df_stock_quotation_debug0 = select secu_code as data_code , end_date   , iif(low_price = = 0 or if_suspend = 1 ,NULL ,low_price )     as low_price ,   iif(high_price = = 0 or if_suspend = 1 ,NULL ,high_price ) as high_price ,iif(close_price = = 0 or if_suspend = 1 ,NULL ,close_price )     as close_price,iif(open_price = = 0 or if_suspend = 1 ,NULL ,open_price )     as open_price   , if_suspend , iif(low_price>pre_close_price and low_price = high_price ,1,0) stockboard  from  loadTable("dfs://ods_stock_quotation","ods_stock_quotation")  where end_date > = min_date  and if_trading_day = 1  order by end_date 
-	df_stock_quotation = select data_code ,end_date ,ffill(low_price) as low_price ,ffill(high_price) as high_price ,ffill(open_price) as open_price ,ffill(close_price) as close_price ,if_suspend,stockboard from df_stock_quotation_debug0 context by data_code csort end_date 
-
-	//获取行情最高最低后复权价格
-	df_stock_adj = select data_code ,end_date,monthEnd(end_date) as month_end_date  ,low_price*factor_value as low_price ,high_price*factor_value as high_price  ,close_price*factor_value as close_price ,open_price * factor_value as open_price  ,if_suspend,stockboard  from   ej(df_stock_quotation as s,df_adjFactor as a ,`data_code`end_date ) order by end_date 
-	//制造月线,日级 
-	 day_k = select data_code,end_date ,month_end_date  ,min(low_price)  as m_low_price ,max(high_price) as m_high_price ,close_price ,first(open_price) as m_open_price ,last(close_price) as m_close_price  from  df_stock_adj where if_suspend = 0 context    by  data_code ,month_end_date  csort end_date 
-	 //月线 
-	 m_k = select data_code ,month_end_date ,m_open_price , m_close_price  from  day_k   context    by  data_code ,month_end_date   csort end_date desc limit 1  
-	 //构建priceMax 为底部形态准备
-	m_k_priceMax = select data_code ,month_end_date  ,m_close_price,m_open_price, max(m_open_price,m_close_price)  as priceMax  from m_k  order by   month_end_date
- 
-	window_data = select *, window(size,month_end_date,-17:0) as window_size, window(canslim_bottom_rule_func,[priceMax,m_close_price,month_end_date],-17:0) as w_first_priceMax_rank from m_k_priceMax context by data_code  
-
-	bottom_list_table = select data_code ,month_end_date as end_date ,iif(  w_first_priceMax_rank = true  and m_close_price >m_open_price, 1, 0) as factor_value from window_data where month_end_date > = 2012.01.01 
-	bottom_list_matrix = trans_table_to_matrix(bottom_list_table)
-	bottom_list_matrix_move = move(bottom_list_matrix,3) 
-	bottom_list_result = msum(bottom_list_matrix_move,3,1)
-	bottom_list_result_gt0 = iif(bottom_list_result>0,1,NULL)
-	bottom_table = select data_code, end_date, gmtime(datetime(monthEnd(temporalAdd(end_date,1M))))$LONG\1000 as factor_value from trans_for_doquery(bottom_list_result_gt0) where end_date < = calc_today()
-	result_table = stk_filter(bottom_table)
-	//save_indicator 240000000021  
-	result = exec factor_value from result_table pivot by end_date,data_code   
-	
-	result = ::setIndexedMatrix!(result)
-	return result 
-}
+    //signal_to_tradingday(signal_date,20)  为持仓结束时间，建仓后20个交易日, specialstock_list_filter  剔除一字板
+    result_table = select end_date, data_code, date2double(signal_to_tradingday(end_date,20)) as factor_value from specialstock_list_filter(stk_list,riskstock_list,true,eom_board)
+    
+    return result_table;
+  }
+  
+  B = get_indicator_data_matrix(`1,`185000000000, `6)
+  
+  /*
+      计算价格相对强度
+  */
+  
+  stk_price_rsi = def (B){
+      //后复权价格
+      //B = get_indicator_data_matrix(`1,`185000000000, `6)
+      min_date = 2013.01.01
+      //后复权收盘价
+      price_matrix = B
+      //矩阵所有股票代码，用于排除北交所
+      all_secu_codes = (price_matrix.colNames())
+      //筛选13年以后行情数据
+      end_date_index = at( price_matrix.rowNames()> = min_date)
+      //筛选后的矩阵
+      price_matrix_filter = price_matrix[end_date_index, all_secu_codes]
+      //偏移100，用于计算100个交易日的收益
+      price_100pre_matrix = move(price_matrix_filter,100)
+      //100个交易日收益
+      p100d_chg_pct = ratio(price_matrix_filter,price_100pre_matrix)-1
+      //每日收益截面rank 》50%的股票列表
+      rank_lt_50 = iif(rowRank(p100d_chg_pct,tiesMethod = `average, percent = true,ascending = true)> = 0.5,1,NULL)
+      //用上月的数据 ，偏移20个交易日
+      rank_lt_50_mv20 = move(rank_lt_50,20)
+      //每日的技术面榜单，信号发出时间 股价强度结果 
+      rsi_table = select data_code, end_date, 1 as factor_value from trans_for_doquery(rank_lt_50_mv20) where end_date < = calc_today()
+  
+      result_table = stk_filter(rsi_table)
+       
+      result = exec factor_value from result_table pivot by end_date,data_code   
+      
+      return  ::setIndexedMatrix!(result)
+  }
+  
+  
+  /*
+      计算价格底部形态
+  */
+  
+  stk_k_line_bottom = def (B){
+      //B = get_indicator_data_matrix(`1,`185200000000,`6)  
+      min_date = min(B.rowNames())
+      //后复权因子
+      df_adjFactor = trans_for_doquery(B)
+   
+      df_stock_quotation_debug0 = select secu_code as data_code, end_date, iif(low_price = = 0 or if_suspend = 1, NULL, low_price) as low_price, iif(high_price = = 0 or if_suspend = 1, NULL, high_price ) as high_price, iif(close_price = = 0 or if_suspend = 1, NULL, close_price ) as close_price, iif(open_price = = 0 or if_suspend = 1, NULL, open_price ) as open_price, if_suspend, iif(low_price>pre_close_price and low_price = high_price, 1,0) stockboard from loadTable("dfs://ods_stock_quotation","ods_stock_quotation") where end_date > = min_date and if_trading_day = 1 order by end_date 
+      df_stock_quotation = select data_code, end_date, ffill(low_price) as low_price, ffill(high_price) as high_price, ffill(open_price) as open_price, ffill(close_price) as close_price, if_suspend,stockboard from df_stock_quotation_debug0 context by data_code csort end_date 
+  
+      //获取行情最高最低后复权价格
+      df_stock_adj = select data_code, end_date, monthEnd(end_date) as month_end_date, low_price*factor_value as low_price, high_price*factor_value as high_price, close_price*factor_value as close_price, open_price * factor_value as open_price, if_suspend, stockboard from ej(df_stock_quotation as s,df_adjFactor as a, `data_code`end_date ) order by end_date 
+      //制造月线,日级 
+      day_k = select data_code,end_date, month_end_date, min(low_price) as m_low_price, max(high_price) as m_high_price, close_price, first(open_price) as m_open_price, last(close_price) as m_close_price from df_stock_adj where if_suspend = 0 context by data_code, month_end_date csort end_date 
+      //月线 
+      m_k = select data_code, month_end_date, m_open_price, m_close_price from day_k context by data_code, month_end_date csort end_date desc limit 1  
+      //构建priceMax 为底部形态准备
+      m_k_priceMax = select data_code, month_end_date, m_close_price,m_open_price, max(m_open_price, m_close_price) as priceMax from m_k order by month_end_date
+      window_data = select *, window(size, month_end_date, -17:0) as window_size, window(canslim_bottom_rule_func,[priceMax, m_close_price,month_end_date], -17:0) as w_first_priceMax_rank from m_k_priceMax context by data_code  
+  
+      bottom_list_table = select data_code, month_end_date as end_date, iif(w_first_priceMax_rank = = true and m_close_price > m_open_price, 1, 0) as factor_value from window_data where month_end_date > = 2012.01.01 
+      bottom_list_matrix = trans_table_to_matrix(bottom_list_table)
+      bottom_list_matrix_move = move(bottom_list_matrix,3) 
+      bottom_list_result = msum(bottom_list_matrix_move,3,1)
+      bottom_list_result_gt0 = iif(bottom_list_result>0,1,NULL)
+      bottom_table = select data_code, end_date, gmtime(datetime(monthEnd(temporalAdd(end_date,1M))))$LONG\1000 as factor_value from trans_for_doquery(bottom_list_result_gt0) where end_date < = calc_today()
+      result_table = canslim_common_filter(bottom_table)
+      //save_indicator 240000000021  
+      result = exec  factor_value from result_table pivot by end_date,data_code   
+      result = ::setIndexedMatrix!(result)
+  
+      return result 
+  }
+  
+  
+  canslim_stock_k_line_bottom = def (B){
+      //B = get_indicator_data_matrix(`1,`185200000000,`6)  
+      min_date = min(B.rowNames())
+      //后复权因子
+      df_adjFactor = trans_for_doquery(B)
+   
+      df_stock_quotation_debug0 = select secu_code as data_code , end_date   , iif(low_price = = 0 or if_suspend = 1 ,NULL ,low_price )     as low_price ,   iif(high_price = = 0 or if_suspend = 1 ,NULL ,high_price ) as high_price ,iif(close_price = = 0 or if_suspend = 1 ,NULL ,close_price )     as close_price,iif(open_price = = 0 or if_suspend = 1 ,NULL ,open_price )     as open_price   , if_suspend , iif(low_price>pre_close_price and low_price = high_price ,1,0) stockboard  from  loadTable("dfs://ods_stock_quotation","ods_stock_quotation")  where end_date > = min_date  and if_trading_day = 1  order by end_date 
+      df_stock_quotation = select data_code ,end_date ,ffill(low_price) as low_price ,ffill(high_price) as high_price ,ffill(open_price) as open_price ,ffill(close_price) as close_price ,if_suspend,stockboard from df_stock_quotation_debug0 context by data_code csort end_date 
+  
+      //获取行情最高最低后复权价格
+      df_stock_adj = select data_code ,end_date,monthEnd(end_date) as month_end_date  ,low_price*factor_value as low_price ,high_price*factor_value as high_price  ,close_price*factor_value as close_price ,open_price * factor_value as open_price  ,if_suspend,stockboard  from   ej(df_stock_quotation as s,df_adjFactor as a ,`data_code`end_date ) order by end_date 
+      //制造月线,日级 
+       day_k = select data_code,end_date ,month_end_date  ,min(low_price)  as m_low_price ,max(high_price) as m_high_price ,close_price ,first(open_price) as m_open_price ,last(close_price) as m_close_price  from  df_stock_adj where if_suspend = 0 context    by  data_code ,month_end_date  csort end_date 
+       //月线 
+       m_k = select data_code ,month_end_date ,m_open_price , m_close_price  from  day_k   context    by  data_code ,month_end_date   csort end_date desc limit 1  
+       //构建priceMax 为底部形态准备
+      m_k_priceMax = select data_code ,month_end_date  ,m_close_price,m_open_price, max(m_open_price,m_close_price)  as priceMax  from m_k  order by   month_end_date
+   
+      window_data = select *, window(size,month_end_date,-17:0) as window_size, window(canslim_bottom_rule_func,[priceMax,m_close_price,month_end_date],-17:0) as w_first_priceMax_rank from m_k_priceMax context by data_code  
+  
+      bottom_list_table = select data_code ,month_end_date as end_date ,iif(  w_first_priceMax_rank = true  and m_close_price >m_open_price, 1, 0) as factor_value from window_data where month_end_date > = 2012.01.01 
+      bottom_list_matrix = trans_table_to_matrix(bottom_list_table)
+      bottom_list_matrix_move = move(bottom_list_matrix,3) 
+      bottom_list_result = msum(bottom_list_matrix_move,3,1)
+      bottom_list_result_gt0 = iif(bottom_list_result>0,1,NULL)
+      bottom_table = select data_code, end_date, gmtime(datetime(monthEnd(temporalAdd(end_date,1M))))$LONG\1000 as factor_value from trans_for_doquery(bottom_list_result_gt0) where end_date < = calc_today()
+      result_table = stk_filter(bottom_table)
+      //save_indicator 240000000021  
+      result = exec factor_value from result_table pivot by end_date,data_code   
+      
+      result = ::setIndexedMatrix!(result)
+      return result 
+  }

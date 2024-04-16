@@ -2,51 +2,9 @@
 stk_price = select * from loadTable("dfs://ods_stock_quotation","ods_stock_quotation")
 
 
-x = select temporalAdd(end_date, -20d) as before_20_end_date, temporalAdd(end_date, 20d) as after_20_end_date, secu_code, end_date as tgt_end_date  from stk_price where change_pct > 0.08 and lead(change_pct) > 0.08 and end_date >= 2014.01.01 context by secu_code csort end_date 
+x = select lead(close_price)\lead(close_price, 5)-1 as next_5d_chg_pct, temporalAdd(end_date, -20d) as before_20_end_date, temporalAdd(end_date, 20d) as after_20_end_date, * from stk_price where change_pct > 0.08 and lead(change_pct) > 0.08 and end_date >= 2014.01.01 context by secu_code csort end_date 
 
-tgt_secu = select x.*, a.change_pct, a.pre_close_price, a.open_price, a.high_price, a.close_price, a.turnover_volume, a.turnover_rate, a.end_date from lj(stk_price as a, x, `secu_code) where a.end_date >= before_20_end_date and a.end_date <= after_20_end_date and if_trading_day = 1 and if_suspend = 0
-
-select * from tgt_secu where secu_code = `600010.SH		 order by end_date limit 1000
-
-stk_net_flow = get_indicator_data_table(`1, `543100000000, `6) 
-
-select * from stk_net_flow where end_date >= 2014.01.01 limit 100
-
-
-
-B=get_indicator_data_matrix(`1,`185000000000 ,`6)
-
-
-
-xx = canslim_stock_price_rsi(B)
-
-xx[0:100, 0:40]
-
-
-/*
-
-  511700000000    个股.近1月北向资金净流入占流通市值比评分_申万1级
-  506500000000    个股.资金持仓评分_申万1级
-  240400000001    个股.近1月主力资金流入占成交额比(非停牌)
-  240400000050    个股.近1月北向资金净流入占流通市值比
-  543100000000    个股.资金流量(MFI)评分_申万1级
-  260000000050    个股.当日主力资金净流入占流通市值比
-  260000000051    个股.近7日主力资金净流入占流通市值比
-  260000000038    个股.主力资金净流入(当日)
-  260000000039    个股.主力资金净流入(一周)
-
-  2178	A=canslim_stock_price_rsi(B)	240000000020 
-2179	A=canslim_stock_k_line_bottom(B)	240000000021 
-2180	A=canslim_fund_list(B,C)	240000000022 	个股.CLANSLIM榜单_机构关注_出入榜时间
-
-*/
-
-
-stk_net_flow = get_indicator_data_table(`1, `506500000000, `6)
-
-select * from stk_net_flow limit 100
-
-
+select * from x limit 100
 select *  from stk_price  where secu_code = `000002.SZ limit 1000
 
 
