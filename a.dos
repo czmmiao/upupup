@@ -2,11 +2,46 @@
 stk_price = select * from loadTable("dfs://ods_stock_quotation","ods_stock_quotation")
 
 
-x = select lead(close_price)\lead(close_price, 5)-1 as next_5d_chg_pct, temporalAdd(end_date, -20d) as before_20_end_date, temporalAdd(end_date, 20d) as after_20_end_date, * from stk_price where change_pct > 0.08 and lead(change_pct) > 0.08 and end_date >= 2014.01.01 context by secu_code csort end_date 
+x = select temporalAdd(end_date, -20d) as before_20_end_date, temporalAdd(end_date, 20d) as after_20_end_date, * from stk_price where change_pct > 0.08 and lead(change_pct) > 0.08 and end_date >= 2014.01.01 context by secu_code csort end_date 
 
 select * from x limit 100
-select *  from stk_price  where secu_code = `000002.SZ limit 1000
+select *  from stk_price  where secu_code = `000002.SZ and if_trading_day = 1 limit 1000
 
+xx = get_indicator_data_table(`1, `240000000034, `6)
+select * from xx limit 100
+
+A=count_technical_form_num(1,1,1)
+A_table = trans_for_doquery(A)
+select * from A_table order by end_date desc limit 100
+
+select * from  loadTable("dfs://dwm_stock_factor_class_value_day","dwm_stock_factor_class_value_day") 
+where  factor_id='240500000001' order by end_date desc limit 10000
+
+find_factor_ids( 210000000008 )
+
+/*
+
+  511700000000    个股.近1月北向资金净流入占流通市值比评分_申万1级
+  506500000000    个股.资金持仓评分_申万1级
+  240400000001    个股.近1月主力资金流入占成交额比(非停牌)
+  240400000050    个股.近1月北向资金净流入占流通市值比
+  543100000000    个股.资金流量(MFI)评分_申万1级
+  260000000050    个股.当日主力资金净流入占流通市值比
+  260000000051    个股.近7日主力资金净流入占流通市值比
+  260000000038    个股.主力资金净流入(当日)
+  260000000039    个股.主力资金净流入(一周)
+3556	A=canslim_latest_list_90d_count(B)	240000000034 	个股.CANSLIM榜单_当期在榜股票近3个月入榜期数
+3052	A=canslim_stock_ratio(B, "equity")	240000000023 	个股.公募基金重仓市值占流通市值(偏股型)
+3053	A=canslim_stock_num(B, "equity")	240000000025 	个股.公募基金重仓数量(偏股型)
+A=count_technical_form_num(1,1,1)
+A_table = trans_for_doquery(A)
+select * from A_table limit 100
+
+  2178	A=canslim_stock_price_rsi(B)	240000000020 
+2179	A=canslim_stock_k_line_bottom(B)	240000000021 
+3056	A=relative_strength(B,`stock,60)	158000010000 	个股.相对强度_近3个月
+
+*/
 
 
 
@@ -25,10 +60,10 @@ B = get_indicator_data_matrix(`2, `210000000004, 9)
 A=backtest_framework(B,31,`210000000004,9)
 
 strategy_portfolio = B 
- in_strategy_id = 31
-  in_factor_id = `210000000004
-   in_indicator_freq = `9
-    in_debug_name = `1
+in_strategy_id = 31
+in_factor_id = `210000000004
+in_indicator_freq = `9
+in_debug_name = `1
 
 t_backtest_strategy_config = select * from load_table_from_mysql("select * from configdb.t_backtest_strategy_config where strategy_id = " + string(in_strategy_id), "configdb")
 
