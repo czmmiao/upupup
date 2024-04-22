@@ -17,7 +17,43 @@ select * from A_table order by end_date desc limit 100
 select * from  loadTable("dfs://dwm_stock_factor_class_value_day","dwm_stock_factor_class_value_day") 
 where  factor_id='240500000001' order by end_date desc limit 10000
 
-find_factor_ids( 210000000008 )
+find_factor_ids( 240700000000 )
+
+x1 = get_indicator_data_table(`1, `240700000000, `6)
+
+select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `240700000000 order by end_date desc limit 100
+
+
+
+stk_score1  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `539700000000 order by end_date desc limit 100
+
+stk_score2  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `540100000000 order by end_date desc limit 100
+
+stk_score3  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `540500000000 order by end_date desc limit 100
+
+stk_score4  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `541000000000 order by end_date desc limit 100
+
+stk_score5  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `541400000000 order by end_date desc limit 100
+
+stk_score6  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `541600000000 order by end_date desc limit 100
+
+stk_score7  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `503300000000 order by end_date desc limit 100
+
+stk_score8  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `541900000000 order by end_date desc limit 100
+
+stk_score9  = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `542300000000 order by end_date desc limit 100
+
+stk_score10 = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `542700000000 order by end_date desc limit 100
+
+stk_score11 = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `543200000000 order by end_date desc limit 100
+
+stk_score12 = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `543600000000 order by end_date desc limit 100
+
+stk_score13 = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `543800000000 order by end_date desc limit 100
+
+stk_score14 = select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `505100000000 order by end_date desc limit 100
+
+select * from loadTable("dfs://dwm_stock_factor_value_day", "dwm_stock_factor_value_day") where factor_id = `{id} order by end_date desc limit 100
 
 /*
 
@@ -37,9 +73,28 @@ A=count_technical_form_num(1,1,1)
 A_table = trans_for_doquery(A)
 select * from A_table limit 100
 
+3082	A=stock_variation_date(B,`up)	240700000000 
+
   2178	A=canslim_stock_price_rsi(B)	240000000020 
 2179	A=canslim_stock_k_line_bottom(B)	240000000021 
 3056	A=relative_strength(B,`stock,60)	158000010000 	个股.相对强度_近3个月
+
+
+53970000	A=stock_score_dimension([B,C], [1,1], NULL, true)	539700000000 	个股.均线评分_全市场
+54010000	A=stock_score_dimension([B,C,D,E,F], [1,1,1,1,1], NULL, true)	540100000000 	个股.股价趋势评分_全市场
+54050000	A=stock_score_dimension([B,C,D], [1,1,1], NULL, true)	540500000000 	个股.阻力支撑线评分_全市场
+54100000	A=stock_score_dimension([B,C,D,E], [1,1,1,1], NULL, true)	541000000000 	个股.价量评分_全市场
+54140000	A=stock_score_dimension([B,C,D], [1,1,1], NULL, true)	541400000000 	个股.技术形态评分_全市场
+54160000	A=stock_score_dimension([B,C,D,E], [1,1,1,1], NULL, true)	541600000000 	个股.相对强度评分_全市场
+50330000	A=stock_score_dimension([B,C,D,E], [1,1,1,1], NULL, true)	503300000000 	个股.技术分析评分_全市场
+54190000	A=stock_score_dimension([B,C], [1,1], 1, true)	541900000000 	个股.均线评分_申万1级
+54230000	A=stock_score_dimension([B,C,D,E,F], [1,1,1,1,1], 1, true)	542300000000 	个股.股价趋势评分_申万1级
+54270000	A=stock_score_dimension([B,C,D], [1,1,1], 1, true)	542700000000 	个股.阻力支撑线评分_申万1级
+54320000	A=stock_score_dimension([B,C,D,E], [1,1,1,1], 1, true)	543200000000 	个股.价量评分_申万1级
+54360000	A=stock_score_dimension([B,C,D], [1,1,1], 1, true)	543600000000 	个股.技术形态评分_申万1级
+54380000	A=stock_score_dimension([B,C,D,E], [1,1,1,1], 1, true)	543800000000 	个股.相对强度评分_申万1级
+50510000	A=stock_score_dimension([B,C,D,E], [1,1,1,1], 1, true)	505100000000 	个股.技术分析评分_申万1级
+
 
 */
 

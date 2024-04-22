@@ -153,3 +153,102 @@ stk_k_line_bottom = def (B){
     result = ::setIndexedMatrix!(result)
     return result 
   }
+
+
+
+
+if(getFunctionViews().name.find(`stock_score_dimension)>=0)
+  dropFunctionView(`stock_score_dimension)
+go
+/**
+  股票维度评分计算 模式1：以“单项分的加权平均值”为基础计算排序分
+
+*/
+def stock_score_dimension(data, weight, group_type=NULL, if_freq_day=false){
+/*
+  data		数据集, List型
+  weight		权重信息，List型，顺序同data
+  group_type	分组方式（NULL-全市场， 1-申万一级）
+  if_freq_day	是否日频
+  
+  data = [ get_indicator_data_matrix(1,`500900000000 ,`11), get_indicator_data_matrix(1,`501000000000 ,`11), get_indicator_data_matrix(1,`501100000000 ,`11) ]
+  weight = [1, 1, 1]
+  group_type = 1
+  if_freq_day = false
+
+*/
+  v_size = data.size() - 1
+  // 生成一个包含data中所有矩阵行列索引的新矩阵
+  v_pn_full = []
+  for ( i in 0..v_size ) {
+      v_pn_full = iif(i ==0, data[i], v_pn_full + data[i] )
+  }
+  v_pn_full[not(v_pn_full.isNull())] = 1
+  v_pn_full.nullFill!(1)
+
+  // 用完整索引的矩阵和原始矩阵相乘，扩充所有矩阵
+  v_pn_data = []
+  for ( i in 0..v_size ) {
+      v_pn_data.append!(data[i] * v_pn_full)
+  }
+
+  // 填充权重矩阵，并计算加权数据
+  for( i in 0..v_size ) {
+      v_data = v_pn_data[i]
+      v_data[not(v_data.isNull())] = weight[i]
+      v_data.nullFill!(0)
+      
+      if ( i == 0 ) {
+          v_result = v_pn_data[i].nullFill(0) * v_data
+          v_weight = v_data
+      }
+      else {
+          v_result = v_result + v_pn_data[i].nullFill(0) * v_data	
+          v_weight = v_weight + v_data
+      }
+  }
+
+  // 加权后的和 除以 权重之和
+  v_score = double(v_result) / v_weight
+  tb = trans_for_doquery(v_score)
+
+  
+  if ( check_null(group_type) ) {
+      v_group_cols = NULL
+  }
+  else {
+      // 申万一级行业下排序
+      if ( if_freq_day) {
+          v_start_date = tb.end_date.min()
+          v_end_date = tb.end_date.max()
+          tb_stock_industry = get_stock_industry_day(v_start_date, v_end_date)
+  
+          tb = select A.*, B.industry_code from ej(tb as A, tb_stock_industry as B, `data_code`end_date, `secu_code`end_date)
+          v_group_cols = "industry_code"
+      }
+      else {
+          v_date_list = tb.end_date.distinct().sort()
+          tb_industry = get_score_report_date_industry(v_date_list)
+  
+          tb = select A.*, B.industry_code from ej(tb as A, tb_industry as B, `data_code`end_date, `secu_code`end_date)
+          v_group_cols = "industry_code"
+      }
+  }
+
+  // 加权平均后的排序并计算评分
+  tb_result = score_basic(data=tb, ascending=false, group_cols=v_group_cols, rank_col=NULL, conds=NULL)
+  result = table_to_panel(data=tb_result, date_col="end_date", key_col="data_code", value_col="score_basic")
+  if ( if_freq_day ) {
+      // 筛选交易日频数据
+      result = matrix_freq_filter(result, p_frequency=18)
+  }
+  
+  return result
+}
+
+addFunctionView(stock_score_dimension)
+
+/*
+  stock_score_dimension( [ get_indicator_data_matrix(1,`500900000000 ,`11), get_indicator_data_matrix(1,`501000000000 ,`11), get_indicator_data_matrix(1,`501100000000 ,`11) ],  [1, 1, 1], 1, false)
+  
+*/
